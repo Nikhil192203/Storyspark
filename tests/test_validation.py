@@ -2,14 +2,16 @@
 
 import json
 from unittest.mock import patch, MagicMock
+
+import httpx
 import pytest
 from fastapi.testclient import TestClient
-from google.genai.errors import APIError
+from google.genai.errors import APIError, ClientError, ServerError
 
 from app.main import app
 from app.config import settings
 from app.schemas import StoryGenerationResponse, get_age_tier_info
-from app.services.gemini_service import build_story_prompt, gemini_service
+from app.services.gemini_service import build_story_prompt, gemini_service, is_transient_error
 
 client = TestClient(app)
 
@@ -247,6 +249,15 @@ def test_generate_story_api_error_handling(monkeypatch):
         assert response.json()["detail"] == "Gemini could not generate a story. Please try again."
 
 
+def test_current_sdk_and_transport_errors_are_classified_correctly():
+    request = httpx.Request("POST", "https://example.invalid")
+    assert is_transient_error(ServerError(503, {"error": {"message": "Unavailable"}}))
+    assert is_transient_error(ClientError(429, {"error": {"message": "Quota"}}))
+    assert is_transient_error(httpx.ReadTimeout("Timed out", request=request))
+    assert is_transient_error(httpx.ConnectError("Disconnected", request=request))
+    assert not is_transient_error(ClientError(404, {"error": {"message": "Not found"}}))
+
+
 def test_retry_transient_503_and_succeed(monkeypatch):
     """Verify that transient 503 on 3.8 Flash retries with backoff and succeeds."""
     monkeypatch.setenv("GEMINI_API_KEY", "mock-valid-api-key")
@@ -336,3 +347,47 @@ def test_fallback_to_gemini_3_7_flash(monkeypatch):
         assert calls[1].kwargs["model"] == "gemini-3.8-flash"
         assert calls[2].kwargs["model"] == "gemini-3.8-flash"
         assert calls[3].kwargs["model"] == "gemini-3.7-flash"
+
+
+def test_transport_failure_reaches_fallback_model(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "mock-valid-api-key")
+    mock_payload = {
+        "story": "A reliable fallback story about gravity guiding a small moon safely around its planet.",
+        "learning_objectives": ["Understand gravity and orbital motion"],
+        "key_concepts": ["Gravity", "Orbit"],
+        "questions": [
+            {"id": "q1", "question": "What pulls the moon toward the planet?", "type": "MCQ", "concept": "Gravity", "options": ["Gravity", "Wind"], "correct_answer": "Gravity", "explanation": "Gravity pulls objects together."},
+            {"id": "q2", "question": "An orbit is a path around another object.", "type": "True/False", "concept": "Orbit", "options": ["True", "False"], "correct_answer": "True", "explanation": "A moon follows an orbit."},
+            {"id": "q3", "question": "Gravity helps keep a moon in orbit.", "type": "True/False", "concept": "Gravity", "options": ["True", "False"], "correct_answer": "True", "explanation": "Gravity bends the moon's path."},
+        ],
+    }
+    mock_response = MagicMock(text=json.dumps(mock_payload))
+    request = httpx.Request("POST", "https://example.invalid")
+    failures = [httpx.ConnectError("Disconnected", request=request) for _ in range(3)]
+
+    with patch.object(gemini_service, "initial_backoff", 0.001), patch("google.genai.Client") as mock_client_cls:
+        mock_instance = MagicMock()
+        mock_instance.models.generate_content.side_effect = [*failures, mock_response]
+        mock_client_cls.return_value = mock_instance
+
+        response = client.post("/api/story/generate", json={"topic": "Gravity", "age": 8})
+
+    assert response.status_code == 200
+    calls = mock_instance.models.generate_content.call_args_list
+    assert len(calls) == 4
+    assert calls[3].kwargs["model"] == "gemini-3.7-flash"
+
+
+def test_quota_exhaustion_is_not_reported_as_model_overload(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "mock-valid-api-key")
+    quota_error = ClientError(429, {"error": {"message": "Resource exhausted"}})
+
+    with patch.object(gemini_service, "initial_backoff", 0.001), patch("google.genai.Client") as mock_client_cls:
+        mock_instance = MagicMock()
+        mock_instance.models.generate_content.side_effect = [quota_error] * 6
+        mock_client_cls.return_value = mock_instance
+
+        response = client.post("/api/story/generate", json={"topic": "Gravity", "age": 8})
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Gemini request quota is temporarily exhausted. Please try again later."

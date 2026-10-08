@@ -8,7 +8,8 @@ response validation, transient error retries (503/429), and fallback to gemini-3
 import asyncio
 import json
 import logging
-from typing import Optional
+
+import httpx
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 
@@ -23,14 +24,11 @@ logger = logging.getLogger(__name__)
 
 
 def is_transient_error(exc: Exception) -> bool:
-    """Checks whether an error is transient (HTTP 503 / 429 / high demand) suitable for retry."""
+    """Check whether a Gemini or transport failure is safe to retry."""
+    if isinstance(exc, (TimeoutError, httpx.TransportError)):
+        return True
     if isinstance(exc, APIError):
-        code = getattr(exc, "code", None)
-        if code in (503, 429):
-            return True
-        msg = str(exc).upper()
-        if any(term in msg for term in ("503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "HIGH DEMAND")):
-            return True
+        return getattr(exc, "code", None) in (408, 429, 500, 502, 503, 504)
     return False
 
 
@@ -81,9 +79,9 @@ class GeminiService:
         self.model_name = settings.GEMINI_MODEL
         self.fallback_model = settings.GEMINI_FALLBACK_MODEL
         self.max_retries_per_model = 2
-        self.initial_backoff = 0.5
+        self.initial_backoff = 1.0
         self.backoff_multiplier = 2.0
-        self.max_backoff = 2.0
+        self.max_backoff = 4.0
 
     @property
     def api_key(self) -> str:
@@ -170,40 +168,30 @@ class GeminiService:
                             detail="Received malformed story format from Gemini API.",
                         )
 
-                except APIError as api_err:
-                    if is_transient_error(api_err):
-                        last_transient_error = api_err
+                except (APIError, httpx.TransportError, TimeoutError) as request_error:
+                    if is_transient_error(request_error):
+                        last_transient_error = request_error
                         if attempt < self.max_retries_per_model:
                             backoff = min(
                                 self.initial_backoff * (self.backoff_multiplier ** attempt),
                                 self.max_backoff,
                             )
                             logger.warning(
-                                "Transient error on %s (attempt %d): %s. Retrying in %.2fs...",
-                                model, attempt + 1, getattr(api_err, "message", str(api_err)), backoff
+                                "Transient Gemini request failure on %s (attempt %d). Retrying in %.2fs.",
+                                model,
+                                attempt + 1,
+                                backoff,
                             )
                             await asyncio.sleep(backoff)
                             continue
-                        else:
-                            logger.warning(
-                                "Model %s exhausted retries with transient error.",
-                                model
-                            )
-                            # Break inner loop to try fallback model
-                            break
-                    else:
-                        # Non-transient APIError (e.g., 400 Bad Request, 403 Forbidden)
-                        logger.error("Non-transient Gemini API error on %s", model)
-                        raise HTTPException(
-                            status_code=status.HTTP_502_BAD_GATEWAY,
-                            detail="Gemini could not generate a story. Please try again.",
-                        )
-                except TimeoutError:
-                    logger.error("Gemini API request timed out on %s", model)
-                    if attempt < self.max_retries_per_model:
-                        await asyncio.sleep(self.initial_backoff)
-                        continue
-                    break
+                        logger.warning("Model %s exhausted retries.", model)
+                        break
+
+                    logger.error("Non-transient Gemini API error on %s", model)
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Gemini could not generate a story. Please try again.",
+                    )
                 except HTTPException:
                     raise
                 except Exception:
@@ -215,9 +203,14 @@ class GeminiService:
 
         # If all models exhausted transient errors
         if last_transient_error:
+            if getattr(last_transient_error, "code", None) == 429:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Gemini request quota is temporarily exhausted. Please try again later.",
+                )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Gemini is temporarily overloaded. Please try again shortly.",
+                detail="Gemini is temporarily unavailable. Please try again shortly.",
             )
 
         raise HTTPException(
