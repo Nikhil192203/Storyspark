@@ -144,7 +144,7 @@ class StoryGenerationResponse(BaseModel):
 class AssessmentSubmissionRequest(BaseModel):
     """Complete learner responses for deterministic local scoring."""
 
-    questions: list[AssessmentQuestion] = Field(..., min_length=3, max_length=5)
+    questions: list[AssessmentQuestion] = Field(..., min_length=1, max_length=5)
     answers: dict[str, str]
 
     @model_validator(mode="after")
@@ -169,6 +169,46 @@ class AssessmentScoreResponse(BaseModel):
     total: int
     percentage: int
     concept_results: list[ConceptResult]
+
+
+class LearningReportRequest(AssessmentSubmissionRequest):
+    topic: str = Field(..., min_length=2, max_length=100)
+    age: int = Field(..., ge=4, le=14)
+    learning_objectives: list[str] = Field(..., min_length=1, max_length=3)
+
+
+class ReportConceptResult(ConceptResult):
+    status: Literal["mastered", "developing", "needs reinforcement"]
+
+
+class LearningReport(BaseModel):
+    topic: str
+    age: int
+    correct: int
+    total: int
+    percentage: int
+    objective_coverage: list[Literal["mastered", "developing", "needs reinforcement"]]
+    concept_results: list[ReportConceptResult]
+    summary: str
+    parent_teacher_takeaway: str
+    recommended_next_step: str
+
+
+class ReinforcementRequest(LearningReportRequest):
+    """Validated original assessment context used to target real knowledge gaps."""
+
+
+class ReinforcementResponse(BaseModel):
+    teaching_text: str = Field(..., min_length=40, max_length=2500)
+    gap_concepts: list[str] = Field(..., min_length=1, max_length=4)
+    questions: list[AssessmentQuestion] = Field(..., min_length=1, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_gap_alignment(self):
+        gaps = {concept.strip().casefold() for concept in self.gap_concepts}
+        if any(question.concept.strip().casefold() not in gaps for question in self.questions):
+            raise ValueError("Reinforcement questions must test a gap concept.")
+        return self
 
 
 class ValidationResponse(BaseModel):

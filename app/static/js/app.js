@@ -1,502 +1,117 @@
-/**
- * StorySpark Application Client Logic
- * Provides accessible controls, real-time validation, Google Gemini integration,
- * and loading/error state management.
- */
-
 document.addEventListener("DOMContentLoaded", () => {
-  // Elements
-  const form = document.getElementById("story-form");
-  const topicInput = document.getElementById("topic-input");
-  const topicCharCount = document.getElementById("topic-char-count");
-  const topicError = document.getElementById("topic-error");
-  const ageRadios = document.querySelectorAll('input[name="child_age"]');
-  const ageError = document.getElementById("age-error");
-  const submitBtn = document.getElementById("submit-btn");
-  const btnSpinner = submitBtn.querySelector(".btn-spinner");
+  const $ = (id) => document.getElementById(id);
+  const form = $("story-form");
+  const topicInput = $("topic-input");
+  const submitBtn = $("submit-btn");
   const btnText = submitBtn.querySelector(".btn-text");
+  const spinner = submitBtn.querySelector(".btn-spinner");
+  const state = { topic: "", age: 8, objectives: [], questions: [], answers: {}, followUpQuestions: [], report: null };
+  const PEDAGOGY = { "4-6": "Playful discovery", "7-9": "Story-based adventure", "10-12": "Problem-solving story", "13-14": "Real-world inquiry" };
 
-  // Status & Feedback banners
-  const backendStatusEl = document.getElementById("backend-status");
-  const errorBanner = document.getElementById("error-banner");
-  const errorBannerMessage = document.getElementById("error-banner-message");
-  const errorBannerClose = document.getElementById("error-banner-close");
-  const infoBanner = document.getElementById("info-banner");
-  const infoBannerMessage = document.getElementById("info-banner-message");
+  function ageBand(age) { return age <= 6 ? "4-6" : age <= 9 ? "7-9" : age <= 12 ? "10-12" : "13-14"; }
+  function setJourney(step) { document.querySelectorAll(".journey-step").forEach((item) => item.classList.toggle("active", item.dataset.step === step)); }
+  function show(el) { el.classList.remove("hidden"); }
+  function hide(el) { el.classList.add("hidden"); }
+  function notice(kind, message) { $("error-banner-message").textContent = message; kind === "error" ? show($("error-banner")) : (($("info-banner-message").textContent = message), show($("info-banner"))); }
+  function clearNotices() { hide($("error-banner")); hide($("info-banner")); }
+  function statusLabel(status) { return status === "mastered" ? "🟢 Mastered" : status === "developing" ? "🟡 Developing" : "🔴 Needs reinforcement"; }
+  function responseError(response, fallback) { return response.json().then((body) => body.detail || fallback).catch(() => fallback); }
 
-  // Pedagogy preview cards
-  const pedagogyTier = document.getElementById("pedagogy-tier");
-  const pedagogyComplexity = document.getElementById("pedagogy-complexity");
-  const pedagogyStyle = document.getElementById("pedagogy-style");
-
-  // Loading state
-  const loadingState = document.getElementById("loading-state");
-
-  // Story presentation elements
-  const storyDisplaySection = document.getElementById("story-display-section");
-  const storyTopicBadge = document.getElementById("story-topic-badge");
-  const storyAgeBadge = document.getElementById("story-age-badge");
-  const storyTierBadge = document.getElementById("story-tier-badge");
-  const storyBody = document.getElementById("story-body");
-  const learningObjectivesList = document.getElementById("learning-objectives-list");
-  const keyConceptsContainer = document.getElementById("key-concepts-container");
-  const createAnotherBtn = document.getElementById("create-another-btn");
-  const assessmentForm = document.getElementById("assessment-form");
-  const assessmentQuestions = document.getElementById("assessment-questions");
-  const assessmentProgress = document.getElementById("assessment-progress");
-  const assessmentError = document.getElementById("assessment-error");
-  const assessmentResults = document.getElementById("assessment-results");
-  let currentQuestions = [];
-
-  // Topic suggestion chips
-  const topicChips = document.querySelectorAll(".topic-chip");
-
-  // Pedagogy guidance mapping
-  const PEDAGOGY_DATA = {
-    "4-6": {
-      tier: "Early Explorer (Ages 4–6)",
-      complexity: "Foundational / Intuitive",
-      style: "Playful metaphors, sensory descriptions, vibrant characters, and simple everyday scenarios without technical jargon.",
-    },
-    "7-9": {
-      tier: "Curious Adventurer (Ages 7–9)",
-      complexity: "Intermediate / Exploratory",
-      style: "Exciting quests, dialogue, relatable challenges, and tangible cause-and-effect science.",
-    },
-    "10-12": {
-      tier: "Bold Discoverer (Ages 10–12)",
-      complexity: "Advanced / Analytical",
-      style: "Deeper scientific mechanisms, narrative stakes, mathematical reasoning, and problem-solving puzzles.",
-    },
-    "13-14": {
-      tier: "Young Innovator (Ages 13–14)",
-      complexity: "Proficient / Systematic",
-      style: "Nuanced inquiry, systemic connections, real-world applications, and higher-order critical thinking.",
-    },
-  };
-
-  /**
-   * Determine age band key for given age number
-   */
-  function getAgeBand(age) {
-    if (age <= 6) return "4-6";
-    if (age <= 9) return "7-9";
-    if (age <= 12) return "10-12";
-    return "13-14";
-  }
-
-  /**
-   * Update pedagogy insight card when age changes
-   */
-  function updatePedagogyGuidance(age) {
-    const band = getAgeBand(age);
-    const data = PEDAGOGY_DATA[band];
-    if (data) {
-      pedagogyTier.textContent = data.tier;
-      pedagogyComplexity.textContent = data.complexity;
-      pedagogyStyle.textContent = data.style;
-    }
-  }
-
-  /**
-   * Check backend health and update status dot
-   */
-  async function checkBackendHealth() {
+  async function health() {
     try {
-      const response = await fetch("/api/health");
-      if (response.ok) {
-        const data = await response.json();
-        const geminiStatus = data.gemini_configured ? "Gemini Ready" : "Gemini Key Missing";
-        backendStatusEl.innerHTML = `
-          <span class="status-dot ${data.gemini_configured ? 'status-online' : 'status-unknown'}" aria-hidden="true"></span>
-          <span class="status-text">Backend Active &bull; ${geminiStatus}</span>
-        `;
-      } else {
-        throw new Error("Backend returned status " + response.status);
-      }
-    } catch (err) {
-      backendStatusEl.innerHTML = `
-        <span class="status-dot status-offline" aria-hidden="true"></span>
-        <span class="status-text">Backend Disconnected</span>
-      `;
-    }
+      const response = await fetch("/api/health"); const data = await response.json();
+      $("backend-status").replaceChildren(); const dot = document.createElement("span"); dot.className = `status-dot ${data.gemini_configured ? "online" : "offline"}`; dot.setAttribute("aria-hidden", "true");
+      $("backend-status").append(dot, document.createTextNode(data.gemini_configured ? "Ready to create" : "Service setup needed"));
+    } catch { $("backend-status").textContent = "Service unavailable"; }
   }
 
-  // Initial health check
-  checkBackendHealth();
+  function updateSettings() { const age = Number(document.querySelector('input[name="child_age"]:checked').value); $("setting-age").textContent = `${age} years`; $("setting-style").textContent = PEDAGOGY[ageBand(age)]; }
+  topicInput.addEventListener("input", () => { $("topic-char-count").textContent = `${topicInput.value.length} / 100`; hide($("topic-error")); });
+  document.querySelectorAll(".topic-chip").forEach((button) => button.addEventListener("click", () => { topicInput.value = button.dataset.topic; topicInput.dispatchEvent(new Event("input")); topicInput.focus(); }));
+  document.querySelectorAll('input[name="child_age"]').forEach((input) => input.addEventListener("change", updateSettings));
+  $("error-banner-close").addEventListener("click", () => hide($("error-banner")));
 
-  /**
-   * Character counter for topic input
-   */
-  function updateCharCount() {
-    const len = topicInput.value.length;
-    topicCharCount.textContent = `${len} / 100`;
+  function validateStoryForm() {
+    const topic = topicInput.value.trim(); const age = Number(document.querySelector('input[name="child_age"]:checked')?.value);
+    if (topic.length < 2 || !/[a-zA-Z0-9]/.test(topic)) { $("topic-error").textContent = "Enter a meaningful topic with at least 2 characters."; show($("topic-error")); topicInput.focus(); return null; }
+    return { topic, age };
   }
 
-  topicInput.addEventListener("input", () => {
-    updateCharCount();
-    clearFieldError(topicInput, topicError);
-  });
-
-  /**
-   * Quick chip clicks
-   */
-  topicChips.forEach((chip) => {
-    chip.addEventListener("click", () => {
-      topicInput.value = chip.dataset.topic;
-      updateCharCount();
-      clearFieldError(topicInput, topicError);
-      topicInput.focus();
-    });
-  });
-
-  /**
-   * Age radio selection listener
-   */
-  ageRadios.forEach((radio) => {
-    radio.addEventListener("change", () => {
-      const selectedAge = parseInt(radio.value, 10);
-      updatePedagogyGuidance(selectedAge);
-      clearFieldError(null, ageError);
-    });
-  });
-
-  /**
-   * Show error for a specific field
-   */
-  function setFieldError(inputEl, errorEl, message) {
-    if (inputEl) {
-      inputEl.classList.add("has-error");
-      inputEl.setAttribute("aria-invalid", "true");
-    }
-    if (errorEl) {
-      errorEl.textContent = message;
-      errorEl.classList.remove("hidden");
-    }
+  function splitScenes(story) {
+    const paragraphs = story.split(/\n\s*\n/).filter(Boolean);
+    if (paragraphs.length > 1) return paragraphs;
+    const sentences = story.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [story];
+    const count = Math.min(3, Math.max(1, Math.ceil(sentences.length / 3)));
+    const size = Math.ceil(sentences.length / count);
+    return Array.from({ length: count }, (_, index) => sentences.slice(index * size, (index + 1) * size).join(" ").trim()).filter(Boolean);
   }
 
-  /**
-   * Clear error for a specific field
-   */
-  function clearFieldError(inputEl, errorEl) {
-    if (inputEl) {
-      inputEl.classList.remove("has-error");
-      inputEl.removeAttribute("aria-invalid");
-    }
-    if (errorEl) {
-      errorEl.textContent = "";
-      errorEl.classList.add("hidden");
-    }
+  function renderStory(data) {
+    $("story-topic-badge").textContent = state.topic; $("story-age-badge").textContent = `Age ${state.age}`; $("story-tier-badge").textContent = PEDAGOGY[ageBand(state.age)];
+    $("story-body").replaceChildren(); splitScenes(data.story).forEach((scene, index) => { const section = document.createElement("section"); section.className = "scene-card"; const heading = document.createElement("h4"); heading.textContent = `📖 Scene ${index + 1}`; const paragraph = document.createElement("p"); paragraph.textContent = scene; section.append(heading, paragraph); $("story-body").appendChild(section); });
+    $("learning-objectives-list").replaceChildren(); data.learning_objectives.forEach((item) => { const li = document.createElement("li"); li.textContent = item; $("learning-objectives-list").appendChild(li); });
+    $("key-concepts-container").replaceChildren(); data.key_concepts.forEach((item) => { const tag = document.createElement("span"); tag.textContent = item; $("key-concepts-container").appendChild(tag); });
   }
 
-  /**
-   * Show global error banner
-   */
-  function showErrorBanner(message) {
-    errorBannerMessage.textContent = message;
-    errorBanner.classList.remove("hidden");
-    errorBanner.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  function updateProgress(questions, formElement, target) {
+    const answered = questions.filter((question) => formElement.querySelector(`[name="${question.id}"]:checked`) || formElement.elements.namedItem(question.id)?.value.trim()).length;
+    target.textContent = `Question ${Math.min(answered + 1, questions.length)} of ${questions.length}`;
   }
 
-  /**
-   * Hide global error banner
-   */
-  function hideErrorBanner() {
-    errorBanner.classList.add("hidden");
-  }
-
-  errorBannerClose.addEventListener("click", hideErrorBanner);
-
-  /**
-   * Show info banner
-   */
-  function showInfoBanner(message) {
-    infoBannerMessage.textContent = message;
-    infoBanner.classList.remove("hidden");
-  }
-
-  function hideInfoBanner() {
-    infoBanner.classList.add("hidden");
-  }
-
-  /**
-   * Validate fields locally before submission
-   */
-  function validateLocal() {
-    let isValid = true;
-    hideErrorBanner();
-    hideInfoBanner();
-
-    // Validate Topic
-    const topicVal = topicInput.value.trim();
-    if (!topicVal) {
-      setFieldError(topicInput, topicError, "Please enter a school topic (e.g. Gravity, Fractions).");
-      isValid = false;
-    } else if (topicVal.length < 2) {
-      setFieldError(topicInput, topicError, "Topic must be at least 2 characters long.");
-      isValid = false;
-    } else if (topicVal.length > 100) {
-      setFieldError(topicInput, topicError, "Topic cannot exceed 100 characters.");
-      isValid = false;
-    } else if (!/[a-zA-Z0-9]/.test(topicVal)) {
-      setFieldError(topicInput, topicError, "Topic must contain readable words or numbers.");
-      isValid = false;
-    } else {
-      clearFieldError(topicInput, topicError);
-    }
-
-    // Validate Age
-    const selectedRadio = document.querySelector('input[name="child_age"]:checked');
-    if (!selectedRadio) {
-      setFieldError(null, ageError, "Please select the child's age.");
-      isValid = false;
-    } else {
-      const ageNum = parseInt(selectedRadio.value, 10);
-      if (isNaN(ageNum) || ageNum < 4 || ageNum > 14) {
-        setFieldError(null, ageError, "Age must be between 4 and 14 years.");
-        isValid = false;
-      } else {
-        clearFieldError(null, ageError);
-      }
-    }
-
-    return isValid;
-  }
-
-  function updateAssessmentProgress() {
-    const answered = currentQuestions.filter((question) => {
-      const input = assessmentForm.elements.namedItem(question.id);
-      return input && ((input.value || "").trim() || [...assessmentForm.querySelectorAll(`input[name="${question.id}"]`)].some((option) => option.checked));
-    }).length;
-    assessmentProgress.textContent = `Question ${Math.min(answered + 1, currentQuestions.length)} of ${currentQuestions.length}`;
-  }
-
-  function renderAssessment(questions) {
-    currentQuestions = questions;
-    assessmentQuestions.replaceChildren();
-    assessmentError.classList.add("hidden");
-    assessmentResults.classList.add("hidden");
-
+  function renderQuestions(questions, container, formElement, progressTarget = null) {
+    container.replaceChildren();
     questions.forEach((question, index) => {
-      const fieldset = document.createElement("fieldset");
-      fieldset.className = "assessment-question";
-      const legend = document.createElement("legend");
-      legend.textContent = `${index + 1}. ${question.question}`;
-      fieldset.appendChild(legend);
-
+      const fieldset = document.createElement("fieldset"); fieldset.className = "question-card";
+      const legend = document.createElement("legend"); legend.textContent = `${index + 1}. ${question.question}`; fieldset.appendChild(legend);
       if (question.type === "Short Answer") {
-        const label = document.createElement("label");
-        label.htmlFor = `answer-${question.id}`;
-        label.textContent = `Your answer about ${question.concept}`;
-        const input = document.createElement("input");
-        input.id = `answer-${question.id}`;
-        input.name = question.id;
-        input.className = "form-input";
-        input.type = "text";
-        input.required = true;
-        input.addEventListener("input", updateAssessmentProgress);
-        fieldset.append(label, input);
+        const label = document.createElement("label"); label.htmlFor = `${question.id}-answer`; label.textContent = `Your answer about ${question.concept}`;
+        const input = document.createElement("input"); input.id = `${question.id}-answer`; input.name = question.id; input.required = true; input.addEventListener("input", () => progressTarget && updateProgress(questions, formElement, progressTarget)); fieldset.append(label, input);
       } else {
-        const options = document.createElement("div");
-        options.className = "answer-options";
-        question.options.forEach((option, optionIndex) => {
-          const optionId = `answer-${question.id}-${optionIndex}`;
-          const label = document.createElement("label");
-          label.className = "answer-option";
-          const input = document.createElement("input");
-          input.id = optionId;
-          input.name = question.id;
-          input.type = "radio";
-          input.value = option;
-          input.required = true;
-          input.addEventListener("change", updateAssessmentProgress);
-          const text = document.createElement("span");
-          text.textContent = option;
-          label.append(input, text);
-          options.appendChild(label);
-        });
+        const options = document.createElement("div"); options.className = "answer-options";
+        question.options.forEach((option, optionIndex) => { const id = `${question.id}-${optionIndex}`; const label = document.createElement("label"); const input = document.createElement("input"); input.type = "radio"; input.id = id; input.name = question.id; input.value = option; input.required = true; input.addEventListener("change", () => progressTarget && updateProgress(questions, formElement, progressTarget)); const text = document.createElement("span"); text.textContent = option; label.htmlFor = id; label.append(input, text); options.appendChild(label); });
         fieldset.appendChild(options);
       }
-      assessmentQuestions.appendChild(fieldset);
+      container.appendChild(fieldset);
     });
-    updateAssessmentProgress();
+    if (progressTarget) updateProgress(questions, formElement, progressTarget);
   }
 
-  function getAssessmentAnswers() {
-    return Object.fromEntries(currentQuestions.map((question) => {
-      const selected = assessmentForm.querySelector(`[name="${question.id}"]:checked`) || assessmentForm.elements.namedItem(question.id);
-      return [question.id, selected?.value?.trim() || ""];
-    }));
+  function collectAnswers(questions, formElement) { return Object.fromEntries(questions.map((question) => { const selected = formElement.querySelector(`[name="${question.id}"]:checked`) || formElement.elements.namedItem(question.id); return [question.id, selected?.value.trim() || ""]; })); }
+  function reportPayload(answers) { return { topic: state.topic, age: state.age, learning_objectives: state.objectives, questions: state.questions, answers }; }
+
+  function reportItem(title, content) { const section = document.createElement("section"); section.className = "report-item"; const h3 = document.createElement("h3"); h3.textContent = title; const p = document.createElement("p"); p.textContent = content; section.append(h3, p); return section; }
+  function renderReport(report) {
+    state.report = report; setJourney("report"); $("report-topic-age").textContent = `${report.topic} · Age ${report.age}`;
+    const content = $("report-content"); content.replaceChildren(); const score = document.createElement("section"); score.className = "score-card"; score.innerHTML = `<span>Overall understanding</span><strong>${report.percentage}%</strong><p>${report.correct} of ${report.total} correct</p><div class="progress-track"><span style="width:${report.percentage}%"></span></div>`; content.appendChild(score);
+    const objectives = document.createElement("section"); objectives.className = "report-item"; const h = document.createElement("h3"); h.textContent = "Learning objectives"; const list = document.createElement("ul"); state.objectives.forEach((objective, index) => { const li = document.createElement("li"); li.textContent = `${statusLabel(report.objective_coverage[index])} — ${objective}`; list.appendChild(li); }); objectives.append(h, list); content.appendChild(objectives);
+    const concepts = document.createElement("section"); concepts.className = "report-item"; const conceptHeading = document.createElement("h3"); conceptHeading.textContent = "Concept mastery"; const conceptList = document.createElement("ul"); report.concept_results.forEach((result) => { const li = document.createElement("li"); li.textContent = `${statusLabel(result.status)} — ${result.concept} (${result.correct}/${result.total})`; conceptList.appendChild(li); }); concepts.append(conceptHeading, conceptList); content.appendChild(concepts);
+    content.append(reportItem("What the learner understood", report.summary), reportItem("Recommended next step", report.recommended_next_step));
+    const teacher = $("teacher-content"); teacher.replaceChildren(); teacher.append(reportItem("Overall understanding", `${report.percentage}% (${report.correct}/${report.total})`), reportItem("Strengths and knowledge gaps", report.concept_results.map((item) => `${item.concept}: ${item.status}`).join(" · ")), reportItem("Recommended next step", report.recommended_next_step));
+    const gaps = report.concept_results.filter((item) => item.status !== "mastered"); const action = $("reinforcement-action"); action.replaceChildren();
+    if (gaps.length) { const text = document.createElement("p"); text.textContent = `Targeted support is available for: ${gaps.map((item) => item.concept).join(", ")}.`; const button = document.createElement("button"); button.className = "primary-button"; button.type = "button"; button.textContent = "✨ Reinforce My Gaps"; button.addEventListener("click", generateReinforcement); action.append(text, button); } else { const success = document.createElement("p"); success.className = "great-work"; success.textContent = "🎉 Great work! You demonstrated strong understanding of the key concepts."; action.appendChild(success); }
+    show($("learning-report")); $("learning-report").focus();
   }
 
-  function displayAssessmentResults(result) {
-    assessmentResults.replaceChildren();
-    const heading = document.createElement("h5");
-    heading.textContent = `Score: ${result.correct} of ${result.total} (${result.percentage}%)`;
-    const list = document.createElement("ul");
-    result.concept_results.forEach((concept) => {
-      const item = document.createElement("li");
-      item.textContent = `${concept.concept}: ${concept.status} (${concept.correct}/${concept.total})`;
-      list.appendChild(item);
-    });
-    assessmentResults.append(heading, list);
-    assessmentResults.classList.remove("hidden");
+  async function generateReinforcement() {
+    const action = $("reinforcement-action"); const button = action.querySelector("button"); button.disabled = true; button.textContent = "Creating targeted support…";
+    try { const response = await fetch("/api/reinforcement/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(reportPayload(state.answers)) }); if (!response.ok) throw new Error(await responseError(response, "Unable to create reinforcement.")); const data = await response.json(); renderReinforcement(data); } catch (error) { notice("error", error.message); button.disabled = false; button.textContent = "✨ Reinforce My Gaps"; }
   }
 
-  /**
-   * Render story content safely
-   */
-  function displayStory(topic, age, data) {
-    storyTopicBadge.textContent = topic;
-    storyAgeBadge.textContent = `${age} Years Old`;
-    const band = getAgeBand(age);
-    storyTierBadge.textContent = PEDAGOGY_DATA[band]?.tier || `${age} Years`;
-
-    // Render paragraphs
-    storyBody.innerHTML = "";
-    const rawStory = data.story || "";
-    const paragraphs = rawStory.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
-
-    if (paragraphs.length > 0) {
-      paragraphs.forEach((paragraphText) => {
-        const p = document.createElement("p");
-        p.textContent = paragraphText.trim();
-        storyBody.appendChild(p);
-      });
-    } else {
-      const p = document.createElement("p");
-      p.textContent = rawStory;
-      storyBody.appendChild(p);
-    }
-
-    // Render learning objectives
-    learningObjectivesList.innerHTML = "";
-    if (Array.isArray(data.learning_objectives)) {
-      data.learning_objectives.forEach((obj) => {
-        const li = document.createElement("li");
-        li.textContent = obj;
-        learningObjectivesList.appendChild(li);
-      });
-    }
-
-    // Render key concepts
-    keyConceptsContainer.innerHTML = "";
-    if (Array.isArray(data.key_concepts)) {
-      data.key_concepts.forEach((concept) => {
-        const tag = document.createElement("span");
-        tag.className = "concept-tag";
-        tag.textContent = concept;
-        keyConceptsContainer.appendChild(tag);
-      });
-    }
-
-    renderAssessment(data.questions);
-    storyDisplaySection.classList.remove("hidden");
-    storyDisplaySection.scrollIntoView({ behavior: "smooth", block: "start" });
+  function renderReinforcement(data) {
+    setJourney("reinforce"); const content = $("reinforcement-content"); content.replaceChildren(); const heading = document.createElement("h3"); heading.textContent = `A focused mini-lesson: ${data.gap_concepts.join(", ")}`; const text = document.createElement("p"); text.textContent = data.teaching_text; content.append(heading, text);
+    state.followUpQuestions = data.questions; const followUp = $("follow-up-form"); renderQuestions(data.questions, $("follow-up-questions"), followUp); show(followUp); show($("reinforcement-section")); $("reinforcement-section").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  assessmentForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const answers = getAssessmentAnswers();
-    if (Object.values(answers).some((answer) => !answer)) {
-      assessmentError.textContent = "Please answer every question before submitting.";
-      assessmentError.classList.remove("hidden");
-      return;
-    }
-    assessmentError.classList.add("hidden");
-
-    try {
-      const response = await fetch("/api/assessment/score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questions: currentQuestions, answers }),
-      });
-      if (!response.ok) {
-        throw new Error("Unable to score the assessment.");
-      }
-      displayAssessmentResults(await response.json());
-    } catch (error) {
-      assessmentError.textContent = error.message || "Unable to score the assessment.";
-      assessmentError.classList.remove("hidden");
-    }
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); clearNotices(); const input = validateStoryForm(); if (!input) return;
+    state.topic = input.topic; state.age = input.age; submitBtn.disabled = true; spinner.classList.remove("hidden"); btnText.textContent = "Creating your story…"; show($("loading-state")); hide($("story-display-section")); hide($("learning-report")); hide($("reinforcement-section"));
+    try { const response = await fetch("/api/story/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }); if (!response.ok) throw new Error(await responseError(response, "Unable to create a story.")); const data = await response.json(); state.objectives = data.learning_objectives; state.questions = data.questions; state.answers = {}; renderStory(data); renderQuestions(data.questions, $("assessment-questions"), $("assessment-form"), $("assessment-progress")); setJourney("check"); show($("story-display-section")); $("story-display-section").scrollIntoView({ behavior: "smooth", block: "start" }); notice("success", "Your learning adventure is ready."); } catch (error) { notice("error", error.message); } finally { submitBtn.disabled = false; spinner.classList.add("hidden"); btnText.textContent = "Create my story"; hide($("loading-state")); }
   });
 
-  /**
-   * Form submit handler -> Calls REAL Gemini story generation
-   */
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  $("assessment-form").addEventListener("submit", async (event) => { event.preventDefault(); state.answers = collectAnswers(state.questions, $("assessment-form")); if (Object.values(state.answers).some((answer) => !answer)) { $("assessment-error").textContent = "Answer every question to see the complete report."; show($("assessment-error")); return; } hide($("assessment-error")); try { const response = await fetch("/api/assessment/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(reportPayload(state.answers)) }); if (!response.ok) throw new Error(await responseError(response, "Unable to build learning report.")); renderReport(await response.json()); } catch (error) { $("assessment-error").textContent = error.message; show($("assessment-error")); } });
 
-    if (!validateLocal()) {
-      showErrorBanner("Please correct the errors in the form before continuing.");
-      return;
-    }
+  $("follow-up-form").addEventListener("submit", async (event) => { event.preventDefault(); const answers = collectAnswers(state.followUpQuestions, $("follow-up-form")); if (Object.values(answers).some((answer) => !answer)) { $("follow-up-error").textContent = "Answer every follow-up question first."; show($("follow-up-error")); return; } try { const response = await fetch("/api/assessment/score", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ questions: state.followUpQuestions, answers }) }); if (!response.ok) throw new Error(await responseError(response, "Unable to score follow-up.")); const score = await response.json(); const result = $("follow-up-report"); result.replaceChildren(); const h = document.createElement("h3"); h.textContent = `Updated understanding: ${score.percentage}%`; const p = document.createElement("p"); p.textContent = score.percentage === 100 ? "Excellent—your follow-up answers demonstrate stronger understanding." : "Keep practicing—the follow-up identifies what to revisit next."; result.append(h, p); show(result); hide($("follow-up-error")); } catch (error) { $("follow-up-error").textContent = error.message; show($("follow-up-error")); } });
 
-    const topic = topicInput.value.trim();
-    const age = parseInt(document.querySelector('input[name="child_age"]:checked').value, 10);
-
-    // Enter loading state
-    submitBtn.disabled = true;
-    submitBtn.setAttribute("aria-busy", "true");
-    btnSpinner.classList.remove("hidden");
-    btnText.textContent = "Creating Your Story with Gemini...";
-    loadingState.classList.remove("hidden");
-    loadingState.setAttribute("aria-hidden", "false");
-    storyDisplaySection.classList.add("hidden");
-    hideErrorBanner();
-    hideInfoBanner();
-
-    try {
-      const response = await fetch("/api/story/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ topic, age }),
-      });
-
-      if (!response.ok) {
-        let errorDetail = "Failed to generate story.";
-        try {
-          const errorData = await response.json();
-          errorDetail = errorData.detail || errorDetail;
-        } catch (_) {
-          errorDetail = `Server returned error (${response.status})`;
-        }
-        throw new Error(errorDetail);
-      }
-
-      const data = await response.json();
-
-      // Display real Gemini response
-      displayStory(topic, age, data);
-      showInfoBanner(`Story successfully crafted for ${topic}!`);
-    } catch (err) {
-      showErrorBanner(err.message || "Failed to generate story. Please verify the Gemini API configuration.");
-    } finally {
-      // Restore submit button state
-      submitBtn.disabled = false;
-      submitBtn.removeAttribute("aria-busy");
-      btnSpinner.classList.add("hidden");
-      btnText.textContent = "Create My Story ✨";
-      loadingState.classList.add("hidden");
-      loadingState.setAttribute("aria-hidden", "true");
-    }
-  });
-
-  /**
-   * Handle "Craft Another Story" button
-   */
-  if (createAnotherBtn) {
-    createAnotherBtn.addEventListener("click", () => {
-      form.scrollIntoView({ behavior: "smooth", block: "start" });
-      topicInput.focus();
-    });
-  }
-
-  // Initial pedagogy update for default selected age (8)
-  const defaultChecked = document.querySelector('input[name="child_age"]:checked');
-  if (defaultChecked) {
-    updatePedagogyGuidance(parseInt(defaultChecked.value, 10));
-  }
+  $("create-another-btn").addEventListener("click", () => { form.scrollIntoView({ behavior: "smooth", block: "start" }); topicInput.focus(); setJourney("create"); });
+  health(); updateSettings();
 });

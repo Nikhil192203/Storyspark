@@ -300,7 +300,7 @@ def test_retry_transient_503_and_succeed(monkeypatch):
 
 
 def test_fallback_to_gemini_3_7_flash(monkeypatch):
-    """Verify that when 3.8 Flash exhausts retries with 503, it falls back to gemini-3.7-flash."""
+    """Verify that when 3.8 Flash exhausts retries with 503, it falls back to gemini-3.5-flash."""
     monkeypatch.setenv("GEMINI_API_KEY", "mock-valid-api-key")
 
     mock_payload = {
@@ -346,7 +346,7 @@ def test_fallback_to_gemini_3_7_flash(monkeypatch):
         assert calls[0].kwargs["model"] == "gemini-3.8-flash"
         assert calls[1].kwargs["model"] == "gemini-3.8-flash"
         assert calls[2].kwargs["model"] == "gemini-3.8-flash"
-        assert calls[3].kwargs["model"] == "gemini-3.7-flash"
+        assert calls[3].kwargs["model"] == "gemini-3.5-flash"
 
 
 def test_transport_failure_reaches_fallback_model(monkeypatch):
@@ -375,7 +375,7 @@ def test_transport_failure_reaches_fallback_model(monkeypatch):
     assert response.status_code == 200
     calls = mock_instance.models.generate_content.call_args_list
     assert len(calls) == 4
-    assert calls[3].kwargs["model"] == "gemini-3.7-flash"
+    assert calls[3].kwargs["model"] == "gemini-3.5-flash"
 
 
 def test_quota_exhaustion_is_not_reported_as_model_overload(monkeypatch):

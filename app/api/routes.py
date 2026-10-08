@@ -1,6 +1,6 @@
 """StorySpark API Routes."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from app.config import settings
 from app.schemas import (
     StoryInputRequest,
@@ -9,10 +9,14 @@ from app.schemas import (
     StoryGenerationResponse,
     AssessmentSubmissionRequest,
     AssessmentScoreResponse,
+    LearningReportRequest,
+    LearningReport,
+    ReinforcementRequest,
+    ReinforcementResponse,
     get_age_tier_info,
 )
 from app.services.gemini_service import gemini_service
-from app.services.scoring import score_assessment
+from app.services.scoring import build_learning_report, gap_concepts, score_assessment
 
 router = APIRouter(prefix="/api")
 
@@ -60,3 +64,32 @@ async def generate_story(payload: StoryInputRequest):
 async def score_assessment_submission(payload: AssessmentSubmissionRequest):
     """Score a complete assessment deterministically without calling Gemini."""
     return score_assessment(payload.questions, payload.answers)
+
+
+@router.post("/assessment/report", response_model=LearningReport, tags=["Assessment"])
+async def generate_learning_report(payload: LearningReportRequest):
+    """Build a learning report solely from deterministic assessment results."""
+    return build_learning_report(
+        payload.topic,
+        payload.age,
+        payload.learning_objectives,
+        payload.questions,
+        payload.answers,
+    )
+
+
+@router.post("/reinforcement/generate", response_model=ReinforcementResponse, tags=["Reinforcement"])
+async def generate_reinforcement(payload: ReinforcementRequest):
+    """Generate an opt-in, validated mini-lesson for deterministically identified gaps."""
+    gaps = gap_concepts(payload.questions, payload.answers)
+    if not gaps:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reinforcement is only available when a concept needs reinforcement.",
+        )
+    return await gemini_service.generate_reinforcement(
+        payload.topic,
+        payload.age,
+        payload.learning_objectives,
+        gaps,
+    )

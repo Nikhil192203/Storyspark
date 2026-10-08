@@ -26,7 +26,7 @@ class Settings:
 
     # Primary and fallback Gemini models
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-    GEMINI_FALLBACK_MODEL: str = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.7-flash")
+    GEMINI_FALLBACK_MODEL: str = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash")
 
     # Validation constants
     MIN_TOPIC_LENGTH: int = 2
