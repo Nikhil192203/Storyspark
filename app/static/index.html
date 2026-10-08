@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="StorySpark transforms difficult school science and maths concepts into age-tailored stories that children love to learn." />
+  <meta name="theme-color" content="#4f46e5" />
+  <title>StorySpark | Turn Science & Maths into Stories Kids Love</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <!-- Skip link for keyboard users -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <!-- Application Header -->
+  <header class="app-header" role="banner">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+            <path d="M6 6h10"></path>
+            <path d="M6 10h10"></path>
+            <path d="m9 16 3-3 3 3"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">StorySpark</span>
+          <span class="brand-badge">Educational AI</span>
+        </div>
+      </div>
+
+      <nav class="header-nav" aria-label="Quick links">
+        <div class="status-indicator" id="backend-status" role="status" aria-live="polite">
+          <span class="status-dot status-unknown" aria-hidden="true"></span>
+          <span class="status-text">Connecting to backend...</span>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main id="main-content" class="main-content" role="main">
+    <!-- Hero / Problem Statement Intro -->
+    <section class="hero-section" aria-labelledby="hero-title">
+      <div class="hero-badge">
+        <span class="badge-icon" aria-hidden="true">💡</span>
+        <span>Science & Maths Through Storytelling</span>
+      </div>
+      <h1 id="hero-title" class="hero-title">
+        Kids get bored of formulas.<br />
+        <span class="gradient-text">They never get tired of stories.</span>
+      </h1>
+      <p class="hero-tagline">
+        Turn tricky school concepts—from photosynthesis to fractions—into unforgettable, age-tailored adventures.
+      </p>
+    </section>
+
+    <!-- Interactive Story Creation Shell -->
+    <section class="creator-card" aria-labelledby="creator-heading">
+      <div class="card-header">
+        <h2 id="creator-heading" class="card-title">Craft an Educational Story</h2>
+        <p class="card-subtitle">Choose a concept from class and tell us how old the learner is.</p>
+      </div>
+
+      <!-- Live Error / Notification Banner -->
+      <div id="error-banner" class="alert-banner alert-error hidden" role="alert" aria-live="assertive">
+        <div class="alert-icon" aria-hidden="true">⚠️</div>
+        <div class="alert-content">
+          <strong id="error-banner-title">Action required:</strong>
+          <span id="error-banner-message">Please fix the highlighted fields below.</span>
+        </div>
+        <button type="button" class="alert-close" id="error-banner-close" aria-label="Dismiss error notification">
+          &times;
+        </button>
+      </div>
+
+      <!-- Live Success / Pedagogy Preview Banner -->
+      <div id="info-banner" class="alert-banner alert-success hidden" role="status" aria-live="polite">
+        <div class="alert-icon" aria-hidden="true">✨</div>
+        <div class="alert-content">
+          <strong id="info-banner-title">Input Validated:</strong>
+          <span id="info-banner-message">Ready for story creation.</span>
+        </div>
+      </div>
+
+      <!-- Main Input Form -->
+      <form id="story-form" novalidate class="story-form">
+        <!-- School Concept Input -->
+        <div class="form-group" id="group-topic">
+          <div class="label-row">
+            <label for="topic-input" class="form-label">
+              School Concept or Topic <span class="required" aria-hidden="true">*</span>
+            </label>
+            <span class="char-count" id="topic-char-count" aria-live="polite">0 / 100</span>
+          </div>
+          
+          <input
+            type="text"
+            id="topic-input"
+            name="topic"
+            class="form-input"
+            placeholder="e.g., Photosynthesis, Gravity, Adding Fractions, Water Cycle..."
+            maxlength="100"
+            autocomplete="off"
+            aria-required="true"
+            aria-describedby="topic-hint topic-error"
+          />
+
+          <p id="topic-hint" class="input-hint">
+            Enter any STEM topic from school textbooks (science, math, physics, biology, chemistry).
+          </p>
+          <p id="topic-error" class="input-error hidden" role="alert" aria-live="polite"></p>
+
+          <!-- Quick Topic Ideas -->
+          <div class="topic-suggestions" aria-label="Popular school topics">
+            <span class="suggestions-label">Try these school favorites:</span>
+            <div class="chip-container" role="group" aria-label="Quick suggestion chips">
+              <button type="button" class="topic-chip" data-topic="Photosynthesis">🌱 Photosynthesis</button>
+              <button type="button" class="topic-chip" data-topic="Gravity & Planetary Orbits">🪐 Gravity & Orbit</button>
+              <button type="button" class="topic-chip" data-topic="Adding and Subtracting Fractions">🍕 Fractions</button>
+              <button type="button" class="topic-chip" data-topic="The Water Cycle">🌧️ Water Cycle</button>
+              <button type="button" class="topic-chip" data-topic="Electric Circuits">⚡ Electric Circuits</button>
+              <button type="button" class="topic-chip" data-topic="How the Heart Pumps Blood">❤️ The Heart</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Age Selector Fieldset -->
+        <fieldset class="form-group" id="group-age">
+          <legend class="form-label">
+            Child's Age <span class="required" aria-hidden="true">*</span>
+          </legend>
+          <p id="age-hint" class="input-hint">
+            Stories are tuned to the child's developmental age, vocabulary, and conceptual maturity.
+          </p>
+
+          <!-- Age selection pills (4 to 14) -->
+          <div class="age-picker-grid" role="radiogroup" aria-labelledby="group-age" aria-describedby="age-hint age-error">
+            <label class="age-option">
+              <input type="radio" name="child_age" value="4" />
+              <span class="age-bubble">4</span>
+            </label>
+            <label class="age-option">
+              <input type="radio" name="child_age" value="5" />
+              <span class="age-bubble">5</span>
+            </label>
+            <label class="age-option">
+              <input type="radio" name="child_age" value="6" />
+              <span class="age-bubble">6</span>
+            </label>
+            <label class="age-option">
+              <input type="radio" name="child_age" value="7" />
+              <span class="age-bubble">7</span>
+            </label>
+            <label class="age-option">
+              <input type="radio" name="child_age" value="8" checked />
+              <span class="age-bubble">8</span>
+            </label>
+            <label class="age-option">
+              <input type="radio" name="child_age" value="9" />
+              <span class="age-bubble">9</span>
+            </label>
+            <label class="age-option">
+              <input type="radio" name="child_age" value="10" />
+              <span class="age-bubble">10</span>
+            </label>
+            <label class="age-option">
+              <input type="radio" name="child_age" value="11" />
+              <span class="age-bubble">11</span>
+            </label>
+            <label class="age-option">
+              <input type="radio" name="child_age" value="12" />
+              <span class="age-bubble">12</span>
+            </label>
+            <label class="age-option">
+              <input type="radio" name="child_age" value="13" />
+              <span class="age-bubble">13</span>
+            </label>
+            <label class="age-option">
+              <input type="radio" name="child_age" value="14" />
+              <span class="age-bubble">14</span>
+            </label>
+          </div>
+
+          <p id="age-error" class="input-error hidden" role="alert" aria-live="polite"></p>
+
+          <!-- Dynamic Age Pedagogy Insight Card -->
+          <div class="pedagogy-card" id="pedagogy-insight" aria-live="polite">
+            <div class="pedagogy-header">
+              <span class="pedagogy-badge" id="pedagogy-tier">Curious Adventurer (Ages 7–9)</span>
+              <span class="pedagogy-level" id="pedagogy-complexity">Intermediate / Exploratory</span>
+            </div>
+            <p class="pedagogy-style" id="pedagogy-style">
+              Exciting quests, dialogue, relatable challenges, and tangible cause-and-effect science.
+            </p>
+          </div>
+        </fieldset>
+
+        <!-- Submit Button -->
+        <div class="form-actions">
+          <button
+            type="submit"
+            id="submit-btn"
+            class="submit-button"
+            aria-live="polite"
+          >
+            <span class="btn-spinner hidden" aria-hidden="true"></span>
+            <span class="btn-text">Create My Story ✨</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- Loading State Foundation -->
+      <div id="loading-state" class="state-container hidden" aria-hidden="true">
+        <div class="spinner-large" aria-hidden="true"></div>
+        <h3 class="state-title">Preparing Story Framework...</h3>
+        <p class="state-description">Validating school curriculum alignment and age-calibrated parameters.</p>
+        <div class="skeleton-block">
+          <div class="skeleton-line line-long"></div>
+          <div class="skeleton-line line-medium"></div>
+          <div class="skeleton-line line-short"></div>
+        </div>
+      </div>
+
+      <!-- Real Gemini Story Display Container -->
+      <section id="story-display-section" class="story-display-section hidden" aria-labelledby="story-display-title" aria-live="polite">
+        <div class="story-card">
+          <div class="story-meta-bar">
+            <span class="meta-pill meta-topic" id="story-topic-badge">Photosynthesis</span>
+            <span class="meta-pill meta-age" id="story-age-badge">8 Years Old</span>
+            <span class="meta-pill meta-tier" id="story-tier-badge">Curious Adventurer</span>
+          </div>
+
+          <h3 id="story-display-title" class="story-title">Your Educational Adventure</h3>
+
+          <!-- Story Text Body -->
+          <div id="story-body" class="story-body">
+            <!-- Paragraphs inserted dynamically -->
+          </div>
+
+          <!-- Learning Objectives -->
+          <div class="story-section-box learning-objectives-box">
+            <h4 class="box-title">🎯 Learning Objectives</h4>
+            <ul id="learning-objectives-list" class="box-list">
+              <!-- Objectives inserted dynamically -->
+            </ul>
+          </div>
+
+          <!-- Key Concepts -->
+          <div class="story-section-box key-concepts-box">
+            <h4 class="box-title">🔬 Key STEM Concepts</h4>
+            <div id="key-concepts-container" class="concepts-tags">
+              <!-- Concept tags inserted dynamically -->
+            </div>
+          </div>
+
+          <section class="assessment-section" aria-labelledby="assessment-title">
+            <div class="assessment-heading">
+              <h4 id="assessment-title" class="box-title">Check Your Understanding</h4>
+              <p id="assessment-progress" class="assessment-progress" aria-live="polite"></p>
+            </div>
+            <form id="assessment-form" novalidate>
+              <div id="assessment-questions" class="assessment-questions"></div>
+              <p id="assessment-error" class="input-error hidden" role="alert"></p>
+              <button type="submit" id="assessment-submit-btn" class="submit-button">Submit Answers</button>
+            </form>
+            <div id="assessment-results" class="assessment-results hidden" aria-live="polite"></div>
+          </section>
+
+          <!-- Action to create another story -->
+          <div class="story-actions">
+            <button type="button" id="create-another-btn" class="secondary-button">
+              ✨ Craft Another Story
+            </button>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- Hackathon Architectural Roadmap / Features Overview -->
+    <section class="roadmap-section" aria-labelledby="roadmap-title">
+      <h2 id="roadmap-title" class="section-title">The StorySpark Learning Loop</h2>
+      <div class="roadmap-grid">
+        <div class="roadmap-card">
+          <div class="card-step">1</div>
+          <h3>Curriculum Concept</h3>
+          <p>Any challenging math or science topic entered by child, parent, or teacher.</p>
+        </div>
+        <div class="roadmap-card">
+          <div class="card-step">2</div>
+          <h3>Age-Calibrated Story</h3>
+          <p>Tailored tone, reading level, and metaphors ensuring high engagement.</p>
+        </div>
+        <div class="roadmap-card">
+          <div class="card-step">3</div>
+          <h3>Comprehension Assessment</h3>
+          <p>Built-in interactive questions verify if the core concept was actually learned.</p>
+        </div>
+        <div class="roadmap-card">
+          <div class="card-step">4</div>
+          <h3>Parent & Teacher Report</h3>
+          <p>Transparent understanding score and specific recommendations.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Application Footer -->
+  <footer class="app-footer" role="contentinfo">
+    <div class="footer-container">
+      <p class="footer-copy">
+        StorySpark &bull; Built with Google AI &bull; 8-Hour Hackathon Edition
+      </p>
+      <div class="footer-meta">
+        <span class="meta-tag">FastAPI Backend</span>
+        <span class="meta-tag">WCAG 2.1 Accessible</span>
+        <span class="meta-tag">Gemini 3.8 Flash Ready</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
